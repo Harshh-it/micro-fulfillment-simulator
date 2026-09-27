@@ -1,0 +1,686 @@
+<title>Fulfillment Flow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg: #0a0e13;
+    --panel: #121820;
+    --panel-2: #1a222c;
+    --line-idle: #2a3644;
+    --accent: #ffb454;
+    --accent-dim: #8a6a34;
+    --ok: #3ddc84;
+    --danger: #ff5f56;
+    --merge: #5ad1ff;
+    --text: #e7edf3;
+    --text-dim: #8996a6;
+    --text-faint: #576273;
+    --mod-a: #5aa9ff;
+    --mod-b: #c792ea;
+    --mod-c: #4fd1c5;
+    --mod-d: #ff8fa3;
+    --font-display: 'Barlow Condensed', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  body{ background: var(--bg); color: var(--text); font-family: var(--font-body); }
+
+  .wrap{ max-width: 1440px; margin: 0 auto; padding-block: 26px 40px; }
+
+  header.top{ display:flex; flex-direction:column; gap:8px; margin-bottom:18px; }
+  header.top h1{
+    font-family:var(--font-display); font-weight:700;
+    font-size:clamp(28px,4vw,40px); letter-spacing:0.3px; margin:0; text-wrap:balance;
+  }
+  header.top p{ margin:0; color:var(--text-dim); font-size:14.5px; max-width:700px; }
+
+  .metrics{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }
+  .metric{
+    font-family:var(--font-mono); font-size:12px; color:var(--text-dim);
+    background:var(--panel-2); border:1px solid var(--line-idle); border-radius:999px;
+    padding:5px 13px; display:flex; gap:7px; align-items:baseline;
+  }
+  .metric b{ color:var(--text); font-size:13px; }
+  .metric.warn b{ color:var(--accent); }
+
+  .app{ display:flex; flex-direction:column; gap:20px; }
+  .top-row{ display:grid; grid-template-columns: 440px 1fr; gap:20px; align-items:start; }
+  .top-row .card + .card{ margin-top:0; }
+  @media (max-width:960px){ .top-row{ grid-template-columns:1fr; } }
+
+  .card{ background:var(--panel); border:1px solid var(--line-idle); border-radius:14px; padding:18px 20px; }
+  .card + .card{ margin-top:18px; }
+  .card h2{
+    font-family:var(--font-display); font-weight:600; font-size:19px; letter-spacing:0.2px;
+    margin:0 0 12px 0; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  }
+  .card h2 small{ font-family:var(--font-mono); font-size:11px; color:var(--text-faint); font-weight:400; text-transform:uppercase; letter-spacing:0.5px; }
+
+  .module-group{ margin-bottom:8px; }
+  .module-group:last-child{ margin-bottom:0; }
+  .module-group .glabel{ font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-faint); margin-bottom:4px; }
+  .chips{ display:grid; grid-template-columns: repeat(2, 1fr); gap:7px; }
+  .chip{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-dim); background:var(--panel-2);
+    border:1px solid var(--line-idle); border-radius:8px; padding:6px 9px; cursor:pointer; user-select:none;
+    transition:background .15s, border-color .15s, color .15s;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .chip b{ font-weight:600; }
+  .chip:hover{ border-color:var(--text-faint); }
+  .chip.active{ color:#0a0e13; background:var(--chip-color, var(--accent)); border-color:var(--chip-color, var(--accent)); font-weight:500; }
+
+  .actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  button{
+    font-family:var(--font-body); font-size:13px; font-weight:500; border-radius:9px; padding:8px 14px;
+    cursor:pointer; border:1px solid var(--line-idle); background:var(--panel-2); color:var(--text);
+    transition:opacity .15s, background .15s;
+  }
+  button.primary{ background:var(--accent); color:#1a1206; border-color:var(--accent); font-weight:600; }
+  button.ghost{ background:transparent; }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  button:not(:disabled):hover{ opacity:.88; }
+
+  .waiting-banner{
+    display:none; align-items:center; gap:8px; margin-top:12px; padding:8px 12px;
+    background:rgba(255,180,84,.1); border:1px solid var(--accent-dim); border-radius:8px;
+    font-size:12.5px; color:var(--accent);
+  }
+  .waiting-banner.show{ display:flex; }
+
+  .diagram-wrap{
+    width:100%; aspect-ratio: 1000 / 720;
+    background: linear-gradient(var(--panel-2) 1px, transparent 1px) 0 0 / 100% 40px,
+                linear-gradient(90deg, var(--panel-2) 1px, transparent 1px) 0 0 / 40px 100%,
+                var(--panel);
+    border-radius:10px; border:1px solid var(--line-idle); overflow:hidden;
+  }
+  svg{ width:100%; height:100%; display:block; }
+
+  .cabinet rect.frame{ fill:var(--panel-2); stroke:var(--line-idle); stroke-width:1.5; }
+  .slotbox rect{ fill:#0d1319; stroke:var(--line-idle); stroke-width:1.3; transition:stroke .2s, filter .2s; }
+  .slotbox.active rect{ stroke:var(--accent); filter:drop-shadow(0 0 5px rgba(255,180,84,.6)); }
+  .slotbox.ok rect{ stroke:var(--ok); filter:drop-shadow(0 0 5px rgba(61,220,132,.6)); }
+  .slotbox.jam rect{ stroke:var(--danger); filter:drop-shadow(0 0 5px rgba(255,95,86,.65)); }
+
+  .belt{ stroke:var(--line-idle); stroke-width:2.5; fill:none; }
+  .connector{ stroke:var(--line-idle); stroke-width:2; fill:none; stroke-dasharray:3 5; }
+  .trunk{ stroke:var(--line-idle); stroke-width:3; fill:none; }
+
+  .carriage rect{ fill:var(--panel-2); stroke:var(--accent-dim); stroke-width:1.5; }
+  .carriage text{ fill:var(--accent); font-family:var(--font-mono); font-weight:700; }
+
+  .home-dock circle{ fill:#0d1319; stroke:var(--line-idle); stroke-width:1.3; stroke-dasharray:2 2; }
+
+  .empty-cart rect{ fill:transparent; stroke:var(--text-faint); stroke-width:1.4; stroke-dasharray:4 3; }
+
+  .station-box rect.sbg{ fill:var(--panel-2); stroke:var(--line-idle); stroke-width:1.5; transition:stroke .25s, filter .25s; }
+  .station-box.busy rect.sbg{ stroke:var(--accent-dim); }
+  .station-box.ready rect.sbg{ stroke:var(--ok); filter:drop-shadow(0 0 8px rgba(61,220,132,.5)); }
+
+  text{ font-family:var(--font-body); fill:var(--text); }
+  .mono{ font-family:var(--font-mono); }
+  .dim{ fill:var(--text-dim); }
+  .faint{ fill:var(--text-faint); }
+
+  .marker circle{ stroke:#0a0e13; stroke-width:1.4; }
+  .marker text{ fill:#0a0e13; font-family:var(--font-mono); font-weight:700; }
+
+  .note{ margin-top:10px; font-size:12.5px; color:var(--text-faint); line-height:1.55; }
+
+  .log{
+    height:150px; overflow-y:auto; background:#080b0f; border:1px solid var(--line-idle); border-radius:9px;
+    padding:10px 12px; font-family:var(--font-mono); font-size:11.5px; line-height:1.55;
+  }
+  .log .row{ white-space:pre-wrap; word-break:break-word; }
+  .log .t{ color:var(--text-faint); }
+  .log .tag{ font-weight:600; }
+  .log .tag.cmd{ color:var(--text); }
+  .log .tag.ok{ color:var(--ok); }
+  .log .tag.fault{ color:var(--danger); }
+  .log .tag.merge{ color:var(--merge); }
+  .log .tag.pack{ color:var(--ok); }
+  .log .tag.info{ color:var(--accent); }
+  .log .msg{ color:var(--text-dim); }
+  .log .msg.strong{ color:var(--text); font-weight:500; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Fulfillment Flow</h1>
+    <p>Each module is a cabinet of storage slots with its own shuttle belt. A shuttle collects every item requested from its cabinet — travelling to the nearest pending slot each time — then hands the batch to the main distribution belt, which routes every item to whichever free station needs the least travel.</p>
+    <div class="metrics">
+      <div class="metric">Stations busy <b id="m-busy">0 / 4</b></div>
+      <div class="metric">Orders completed <b id="m-completed">0</b></div>
+      <div class="metric warn" id="m-waiting-metric" style="display:none;">Waiting for a station <b id="m-waiting">0</b></div>
+    </div>
+  </header>
+
+  <div class="app">
+    <div class="top-row">
+      <div class="card">
+        <h2>Order Builder</h2>
+        <div id="chip-groups"></div>
+        <div class="actions">
+          <button class="primary" id="send-btn">Send Order</button>
+          <button class="ghost" id="random-btn">Send Random Order</button>
+          <button class="ghost" id="burst-btn">Send 5 Orders at Once</button>
+          <button id="reset-btn">Reset</button>
+        </div>
+        <div class="waiting-banner" id="waiting-banner">Every station is busy — new orders queue until one frees up.</div>
+      </div>
+
+      <div class="card">
+        <h2>Cabinets → Shuttles → Distribution Belt <small>4 stations</small></h2>
+        <div class="diagram-wrap">
+          <svg viewBox="0 0 1000 720" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Event Log <small>every dispense, jam, merge and pack</small></h2>
+      <div class="log" id="log"></div>
+      <div class="note">Every cabinet slot holds a real, orderable SKU. Each shuttle always moves to whichever pending item is nearest, sweeps up its full batch, and hands it off right at the exit — which doubles as its home dock, since every trip ends there anyway. A new order goes to the free station needing the least total travel, and once a station empties out, a dashed empty cart retraces the route back to that same handoff point.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const ROWS = [115, 295, 475, 655];
+  const SLOT_X = [110, 230, 350, 470];
+  const BELT_X_LEFT = 30, BELT_X_EXIT = 580, TRUNK_X = 610, STATION_X0 = 680, STATION_X1 = 960;
+  // Home coincides with the exit: every batch ends its trip heading toward the exit anyway,
+  // so parking there costs nothing, while parking on the far left would force a wasted
+  // round-trip before almost every future pickup.
+  const HOME_X = BELT_X_EXIT;
+  const PX_PER_MS = 0.35;
+  const JAM_PROB = 0.12, JAM_CLEAR_MS = 500, SIGNAL_DELAY_MS = 150;
+  const STATION_CLEAR_DELAY_MS = 1400;
+
+  const MODULES = [
+    { id:'MOD-A', short:'Module A', category:'Bottles',  mech:'Servo Gate',    color:'var(--mod-a)', row:ROWS[0] },
+    { id:'MOD-B', short:'Module B', category:'Boxes',     mech:'Belt Pusher',   color:'var(--mod-b)', row:ROWS[1] },
+    { id:'MOD-C', short:'Module C', category:'Pouches',   mech:'Drop Chute',    color:'var(--mod-c)', row:ROWS[2] },
+    { id:'MOD-D', short:'Module D', category:'Bulk',      mech:'Pneumatic Ram', color:'var(--mod-d)', row:ROWS[3] },
+  ];
+
+  const SKUS = [
+    { id:'A1', name:'Shampoo 200ml', short:'Shampoo',   module:'MOD-A', slot:0, dispense:1200 },
+    { id:'A2', name:'Coke 500ml',    short:'Coke',      module:'MOD-A', slot:1, dispense:1000 },
+    { id:'A3', name:'Detergent 1L',  short:'Detergent', module:'MOD-A', slot:2, dispense:1300 },
+    { id:'A4', name:'Juice 1L',      short:'Juice',     module:'MOD-A', slot:3, dispense:1100 },
+    { id:'B1', name:'Toothpaste',    short:'Toothpaste',module:'MOD-B', slot:0, dispense:800 },
+    { id:'B2', name:'Soap Bar',      short:'Soap',      module:'MOD-B', slot:1, dispense:700 },
+    { id:'B3', name:'Batteries Pack',short:'Batteries', module:'MOD-B', slot:2, dispense:750 },
+    { id:'B4', name:'Cosmetics Kit', short:'Cosmetics', module:'MOD-B', slot:3, dispense:900 },
+    { id:'C1', name:'Chips Packet',  short:'Chips',     module:'MOD-C', slot:0, dispense:600 },
+    { id:'C2', name:'Biscuits Pack', short:'Biscuits',  module:'MOD-C', slot:1, dispense:600 },
+    { id:'C3', name:'Namkeen Pack',  short:'Namkeen',   module:'MOD-C', slot:2, dispense:650 },
+    { id:'C4', name:'Wafers Pack',   short:'Wafers',    module:'MOD-C', slot:3, dispense:600 },
+    { id:'D1', name:'Rice 1kg',      short:'Rice',      module:'MOD-D', slot:0, dispense:1800 },
+    { id:'D2', name:'Flour 1kg',     short:'Flour',     module:'MOD-D', slot:1, dispense:1700 },
+    { id:'D3', name:'Pet Food 1kg',  short:'Pet Food',  module:'MOD-D', slot:2, dispense:1900 },
+    { id:'D4', name:'Sugar 1kg',     short:'Sugar',     module:'MOD-D', slot:3, dispense:1600 },
+  ];
+
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.querySelector('svg');
+  const logEl = document.getElementById('log');
+  const chipGroupsEl = document.getElementById('chip-groups');
+  const sendBtn = document.getElementById('send-btn');
+  const randomBtn = document.getElementById('random-btn');
+  const burstBtn = document.getElementById('burst-btn');
+  const resetBtn = document.getElementById('reset-btn');
+  const waitingBanner = document.getElementById('waiting-banner');
+  const mBusy = document.getElementById('m-busy');
+  const mCompleted = document.getElementById('m-completed');
+  const mWaiting = document.getElementById('m-waiting');
+  const mWaitingMetric = document.getElementById('m-waiting-metric');
+
+  let selected = new Set(['A1','B2','C1','D1']);
+  let epoch = 0;
+  let orderCounter = 1;
+  let completedCount = 0;
+  const waitingOrders = [];
+
+  const STATIONS = ROWS.map((row, i) => ({ index:i, row, order:null }));
+  const moduleState = {};
+  MODULES.forEach(m => { moduleState[m.id] = { pos: HOME_X, busy:false, pending:[], tray:[] }; });
+
+  const els = { slots:{}, carriages:{}, stations:{} };
+
+  function el(tag, attrs){
+    const e = document.createElementNS(svgNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  function rowOf(moduleId){ return MODULES.find(m => m.id === moduleId).row; }
+
+  function buildDiagram(){
+    // trunk vertical line
+    svg.appendChild(el('path', { d:`M ${TRUNK_X} ${ROWS[0]} L ${TRUNK_X} ${ROWS[3]}`, class:'trunk' }));
+    const trunkLabel = el('text', { x:TRUNK_X, y:ROWS[0]-24, 'text-anchor':'middle', class:'faint mono' });
+    trunkLabel.setAttribute('font-size','10');
+    trunkLabel.textContent = 'DISTRIBUTION BELT';
+    svg.appendChild(trunkLabel);
+
+    MODULES.forEach((m, mi) => {
+      const row = m.row;
+      // cabinet frame
+      const cab = el('g', { class:'cabinet' });
+      cab.appendChild(el('rect', { class:'frame', x:5, y:row-90, width:575, height:122, rx:10 }));
+      const title = el('text', { x:52, y:row-72, 'font-size':13, 'font-weight':600 });
+      title.textContent = `${m.short} — ${m.category}`;
+      cab.appendChild(title);
+      const sub = el('text', { x:52, y:row-58, class:'faint', 'font-size':9.5 });
+      sub.textContent = m.mech;
+      cab.appendChild(sub);
+      svg.appendChild(cab);
+
+      els.slots[m.id] = {};
+
+      // real SKU slots
+      SKUS.filter(s => s.module === m.id).forEach(s => {
+        const x = SLOT_X[s.slot];
+        const g = el('g', { class:'slotbox' });
+        g.appendChild(el('rect', { x:x-45, y:row-50, width:90, height:55, rx:6 }));
+        const t1 = el('text', { x, y:row-25, 'text-anchor':'middle', 'font-size':13, 'font-weight':700, fill:m.color });
+        t1.textContent = s.id;
+        const t2 = el('text', { x, y:row-11, 'text-anchor':'middle', class:'dim', 'font-size':9 });
+        t2.textContent = s.short;
+        g.appendChild(t1); g.appendChild(t2);
+        svg.appendChild(g);
+        els.slots[m.id][s.slot] = g;
+      });
+
+      // home dock (shuttle's starting/parking point)
+      const dock = el('g', { class:'home-dock' });
+      dock.appendChild(el('circle', { cx:HOME_X, cy:row, r:10 }));
+      const dockLabel = el('text', { x:HOME_X, y:row+24, 'text-anchor':'middle', class:'faint mono', 'font-size':7.5 });
+      dockLabel.textContent = 'HOME';
+      dock.appendChild(dockLabel);
+      svg.appendChild(dock);
+
+      // belt line + exit connector
+      svg.appendChild(el('path', { d:`M ${BELT_X_LEFT} ${row} L ${BELT_X_EXIT} ${row}`, class:'belt' }));
+      svg.appendChild(el('path', { d:`M ${BELT_X_EXIT} ${row} L ${TRUNK_X} ${row}`, class:'belt' }));
+
+      // carriage
+      const carriage = el('g', { class:'carriage' });
+      carriage.appendChild(el('rect', { x:-16, y:-11, width:32, height:22, rx:5 }));
+      const trayText = el('text', { 'text-anchor':'middle', y:4, 'font-size':10 });
+      trayText.textContent = '';
+      carriage.appendChild(trayText);
+      carriage.setAttribute('transform', `translate(${HOME_X},${row})`);
+      svg.appendChild(carriage);
+      els.carriages[m.id] = { g: carriage, trayText };
+
+      // connector to station row
+      svg.appendChild(el('path', { d:`M ${TRUNK_X} ${row} L ${STATION_X0} ${row}`, class:'connector' }));
+    });
+
+    STATIONS.forEach(st => {
+      const g = el('g', { class:'station-box' });
+      g.appendChild(el('rect', { class:'sbg', x:STATION_X0, y:st.row-55, width:STATION_X1-STATION_X0, height:110, rx:10 }));
+      const t1 = el('text', { x:STATION_X0+16, y:st.row-30, 'font-size':13, 'font-weight':600 });
+      t1.textContent = `STATION ${st.index+1}`;
+      const t2 = el('text', { x:STATION_X0+16, y:st.row-6, class:'dim mono', 'font-size':12 });
+      t2.textContent = 'IDLE';
+      const t3 = el('text', { x:STATION_X0+16, y:st.row+16, class:'mono', 'font-size':15, 'font-weight':700 });
+      t3.textContent = '';
+      const t4 = el('text', { x:STATION_X0+16, y:st.row+36, class:'faint mono', 'font-size':10 });
+      t4.textContent = '';
+      g.appendChild(t1); g.appendChild(t2); g.appendChild(t3); g.appendChild(t4);
+      svg.appendChild(g);
+      els.stations[st.index] = { g, orderLine:t2, progress:t3, codes:t4 };
+    });
+  }
+
+  function buildChips(){
+    chipGroupsEl.innerHTML = '';
+    MODULES.forEach(m => {
+      const group = document.createElement('div');
+      group.className = 'module-group';
+      const label = document.createElement('div');
+      label.className = 'glabel';
+      label.textContent = `${m.short} — ${m.category} (${m.mech})`;
+      group.appendChild(label);
+
+      const chips = document.createElement('div');
+      chips.className = 'chips';
+      SKUS.filter(s => s.module === m.id).forEach(s => {
+        const chip = document.createElement('div');
+        chip.className = 'chip' + (selected.has(s.id) ? ' active' : '');
+        chip.style.setProperty('--chip-color', m.color);
+        chip.innerHTML = `<b>${s.id}</b> · ${s.name}`;
+        chip.addEventListener('click', () => {
+          if (selected.has(s.id)) selected.delete(s.id); else selected.add(s.id);
+          chip.classList.toggle('active');
+        });
+        chips.appendChild(chip);
+      });
+      group.appendChild(chips);
+      chipGroupsEl.appendChild(group);
+    });
+  }
+
+  function log(cls, label, msg, strong){
+    const row = document.createElement('div');
+    row.className = 'row';
+    const now = new Date();
+    const ts = now.toTimeString().slice(0,8);
+    row.innerHTML = `<span class="t">[${ts}]</span> <span class="tag ${cls}">${label}</span> <span class="msg${strong ? ' strong' : ''}">${msg}</span>`;
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function animateMove(target, x1, y1, x2, y2, duration, myEpoch){
+    return new Promise(resolve => {
+      const start = performance.now();
+      function frame(now){
+        if (myEpoch !== epoch) { resolve(false); return; }
+        const t = Math.min(1, (now - start) / duration);
+        const x = x1 + (x2 - x1) * t, y = y1 + (y2 - y1) * t;
+        target.setAttribute('transform', `translate(${x},${y})`);
+        if (t < 1) requestAnimationFrame(frame); else resolve(true);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function updateBusyMetric(){
+    const busy = STATIONS.filter(s => s.order).length;
+    mBusy.textContent = `${busy} / 4`;
+  }
+
+  function renderStation(index){
+    const st = STATIONS[index];
+    const e = els.stations[index];
+    if (!st.order) {
+      e.orderLine.textContent = 'IDLE';
+      e.progress.textContent = '';
+      e.codes.textContent = '';
+      e.g.classList.remove('busy', 'ready');
+    } else {
+      e.orderLine.textContent = st.order.id;
+      e.progress.textContent = `${st.order.received} / ${st.order.required}`;
+      e.codes.textContent = st.order.arrivedCodes.join('  ');
+      e.g.classList.add('busy');
+    }
+    updateBusyMetric();
+  }
+
+  function renderWaiting(){
+    mWaitingMetric.style.display = waitingOrders.length > 0 ? 'flex' : 'none';
+    mWaiting.textContent = waitingOrders.length;
+    waitingBanner.classList.toggle('show', waitingOrders.length > 0);
+  }
+
+  function assignStation(order){
+    const idle = STATIONS.filter(s => !s.order);
+    if (idle.length === 0) {
+      waitingOrders.push(order);
+      renderWaiting();
+      log('info', 'QUEUE', `${order.id} is waiting — every station is busy`);
+      return;
+    }
+    let best = null, bestCost = Infinity;
+    idle.forEach(s => {
+      let cost = 0;
+      order.items.forEach(it => { cost += Math.abs(rowOf(it.module) - s.row); });
+      if (cost < bestCost) { bestCost = cost; best = s; }
+    });
+    best.order = order;
+    order.stationIndex = best.index;
+    renderStation(best.index);
+    log('info', 'ROUTE', `${order.id} assigned to Station ${best.index + 1} (least total travel for this order's items)`, true);
+
+    const myEpoch = epoch;
+    order.items.forEach(sku => pushPickup(sku.module, { sku, orderId: order.id, stationIndex: best.index, epoch: myEpoch }));
+  }
+
+  function pushPickup(moduleId, pickup){
+    moduleState[moduleId].pending.push(pickup);
+    tryStartSweep(moduleId);
+  }
+
+  function tryStartSweep(moduleId){
+    const st = moduleState[moduleId];
+    if (st.busy || st.pending.length === 0) return;
+    st.busy = true;
+    sweepStep(moduleId);
+  }
+
+  function sweepStep(moduleId){
+    const st = moduleState[moduleId];
+    const myEpoch = epoch;
+    if (myEpoch !== epoch) return;
+    if (st.pending.length === 0) { finishSweep(moduleId); return; }
+
+    let bestIdx = 0, bestDist = Infinity;
+    st.pending.forEach((p, i) => {
+      const d = Math.abs(SLOT_X[p.sku.slot] - st.pos);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    });
+    const pickup = st.pending.splice(bestIdx, 1)[0];
+    const targetX = SLOT_X[pickup.sku.slot];
+    const dist = Math.abs(targetX - st.pos);
+    const moveMs = Math.max(250, dist / PX_PER_MS);
+    const row = rowOf(moduleId);
+    const carriage = els.carriages[moduleId].g;
+
+    animateMove(carriage, st.pos, row, targetX, row, moveMs, myEpoch).then(ok => {
+      if (!ok || myEpoch !== epoch) return;
+      st.pos = targetX;
+      const slotEl = els.slots[moduleId][pickup.sku.slot];
+      slotEl.classList.add('active');
+      log('cmd', moduleId, `shuttle at slot ${pickup.sku.id} — dispensing '${pickup.sku.name}' for ${pickup.orderId}`);
+
+      setTimeout(() => {
+        if (myEpoch !== epoch) return;
+        slotEl.classList.remove('active');
+        const jammed = Math.random() < JAM_PROB;
+        if (jammed) {
+          slotEl.classList.add('jam');
+          log('fault', 'FAULT', `jam at ${pickup.sku.id} in ${moduleId} — clearing and retrying`);
+          setTimeout(() => {
+            if (myEpoch !== epoch) return;
+            slotEl.classList.remove('jam');
+            st.pending.push(pickup);
+            sweepStep(moduleId);
+          }, JAM_CLEAR_MS);
+        } else {
+          slotEl.classList.add('ok');
+          setTimeout(() => slotEl.classList.remove('ok'), 350);
+          log('ok', moduleId, `'${pickup.sku.name}' confirmed on shuttle`);
+          st.tray.push(pickup);
+          els.carriages[moduleId].trayText.textContent = st.tray.length > 0 ? String(st.tray.length) : '';
+          sweepStep(moduleId);
+        }
+      }, pickup.sku.dispense + SIGNAL_DELAY_MS);
+    });
+  }
+
+  function finishSweep(moduleId){
+    const st = moduleState[moduleId];
+    const myEpoch = epoch;
+    const tray = st.tray.slice();
+    st.tray = [];
+    const row = rowOf(moduleId);
+    const carriage = els.carriages[moduleId].g;
+    const dist = Math.abs(BELT_X_EXIT - st.pos);
+    const moveMs = Math.max(250, dist / PX_PER_MS);
+
+    animateMove(carriage, st.pos, row, BELT_X_EXIT, row, moveMs, myEpoch).then(ok => {
+      if (!ok || myEpoch !== epoch) return;
+      st.pos = BELT_X_EXIT;
+      els.carriages[moduleId].trayText.textContent = '';
+      tray.forEach((pickup, i) => setTimeout(() => {
+        if (pickup.epoch === epoch) dispatchToTrunk(moduleId, pickup);
+      }, i * 180));
+      setTimeout(() => {
+        if (myEpoch !== epoch) return;
+        if (st.pending.length > 0) {
+          sweepStep(moduleId);
+        } else {
+          // already parked at the exit/home point — nothing further to do
+          st.busy = false;
+        }
+      }, 60);
+    });
+  }
+
+  async function dispatchToTrunk(moduleId, pickup){
+    const myEpoch = epoch;
+    const row = rowOf(moduleId);
+    const stationRow = STATIONS[pickup.stationIndex].row;
+    const color = MODULES.find(m => m.id === moduleId).color;
+
+    const marker = el('g', { class:'marker' });
+    marker.appendChild(el('circle', { r:13, fill:color }));
+    const t = el('text', { 'text-anchor':'middle', 'dominant-baseline':'central', 'font-size':10 });
+    t.textContent = pickup.sku.id;
+    marker.appendChild(t);
+    marker.setAttribute('transform', `translate(${BELT_X_EXIT},${row})`);
+    svg.appendChild(marker);
+
+    let ok = await animateMove(marker, BELT_X_EXIT, row, TRUNK_X, row, 300, myEpoch);
+    if (!ok || myEpoch !== epoch) { marker.remove(); return; }
+    log('merge', 'MERGE', `'${pickup.sku.name}' (${pickup.orderId}) reaches the distribution belt from ${moduleId}`);
+
+    const vdist = Math.abs(stationRow - row);
+    const vms = Math.max(300, vdist / PX_PER_MS);
+    ok = await animateMove(marker, TRUNK_X, row, TRUNK_X, stationRow, vms, myEpoch);
+    if (!ok || myEpoch !== epoch) { marker.remove(); return; }
+
+    ok = await animateMove(marker, TRUNK_X, stationRow, STATION_X0, stationRow, 300, myEpoch);
+    marker.remove();
+    if (!ok || myEpoch !== epoch) return;
+
+    stationReceiveItem(pickup);
+  }
+
+  function stationReceiveItem(pickup){
+    const st = STATIONS[pickup.stationIndex];
+    if (!st.order || st.order.id !== pickup.orderId) return;
+    st.order.received++;
+    st.order.arrivedCodes.push(pickup.sku.id);
+    renderStation(pickup.stationIndex);
+    log('pack', 'PACK', `[${st.order.received}/${st.order.required}] items at Station ${pickup.stationIndex + 1} for ${pickup.orderId} (latest: ${pickup.sku.name})`);
+    if (st.order.received === st.order.required) orderReadyAtStation(pickup.stationIndex);
+  }
+
+  function orderReadyAtStation(index){
+    const st = STATIONS[index];
+    const order = st.order;
+    const myEpoch = epoch;
+    els.stations[index].g.classList.add('ready');
+    log('ok', 'READY', `${order.id} ready for packing at Station ${index + 1}`, true);
+    completedCount++;
+    mCompleted.textContent = completedCount;
+
+    setTimeout(() => {
+      if (myEpoch !== epoch) return;
+      els.stations[index].g.classList.remove('ready', 'busy');
+      st.order = null;
+      renderStation(index);
+      returnEmptyCarts(order, myEpoch);
+      if (waitingOrders.length > 0) {
+        const next = waitingOrders.shift();
+        renderWaiting();
+        assignStation(next);
+      }
+    }, STATION_CLEAR_DELAY_MS);
+  }
+
+  function returnEmptyCarts(order, myEpoch){
+    const modulesInvolved = Array.from(new Set(order.items.map(it => it.module)));
+    const stationRow = ROWS[order.stationIndex];
+    modulesInvolved.forEach((moduleId, i) => {
+      setTimeout(() => {
+        if (myEpoch !== epoch) return;
+        animateEmptyCart(moduleId, stationRow, myEpoch);
+      }, i * 220);
+    });
+    log('merge', 'RETURN', `empty cart retraces from Station ${order.stationIndex + 1} back to the modules that filled ${order.id}`);
+  }
+
+  async function animateEmptyCart(moduleId, stationRow, myEpoch){
+    const row = rowOf(moduleId);
+    const cart = el('g', { class:'empty-cart' });
+    cart.appendChild(el('rect', { x:-14, y:-10, width:28, height:20, rx:5 }));
+    cart.setAttribute('transform', `translate(${STATION_X0 + 20},${stationRow})`);
+    svg.appendChild(cart);
+
+    let ok = await animateMove(cart, STATION_X0 + 20, stationRow, TRUNK_X, stationRow, 300, myEpoch);
+    if (!ok || myEpoch !== epoch) { cart.remove(); return; }
+
+    const vdist = Math.abs(row - stationRow);
+    const vms = Math.max(300, vdist / PX_PER_MS);
+    ok = await animateMove(cart, TRUNK_X, stationRow, TRUNK_X, row, vms, myEpoch);
+    if (!ok || myEpoch !== epoch) { cart.remove(); return; }
+
+    const hdist = Math.abs(TRUNK_X - HOME_X);
+    ok = await animateMove(cart, TRUNK_X, row, HOME_X, row, Math.max(300, hdist / PX_PER_MS), myEpoch);
+    cart.remove();
+  }
+
+  function sendOrder(ids){
+    if (!ids || ids.length === 0) return;
+    const orderId = `ORD-${orderCounter++}`;
+    const items = ids.map(id => SKUS.find(s => s.id === id));
+    const order = { id:orderId, items, required:items.length, received:0, stationIndex:null, arrivedCodes:[] };
+    log('info', 'ORDER', `${orderId} received — ${items.length} item(s): ${items.map(s => s.id).join(', ')}`, true);
+    assignStation(order);
+  }
+
+  function resetAll(){
+    epoch++;
+    completedCount = 0;
+    orderCounter = 1;
+    waitingOrders.length = 0;
+    mCompleted.textContent = '0';
+    renderWaiting();
+    logEl.innerHTML = '';
+
+    MODULES.forEach(m => {
+      moduleState[m.id] = { pos: HOME_X, busy:false, pending:[], tray:[] };
+      els.carriages[m.id].g.setAttribute('transform', `translate(${HOME_X},${rowOf(m.id)})`);
+      els.carriages[m.id].trayText.textContent = '';
+      Object.values(els.slots[m.id]).forEach(g => g.classList.remove('active', 'ok', 'jam'));
+    });
+    STATIONS.forEach(st => { st.order = null; renderStation(st.index); });
+    Array.from(svg.querySelectorAll('.marker, .empty-cart')).forEach(m => m.remove());
+  }
+
+  buildDiagram();
+  buildChips();
+  STATIONS.forEach(st => renderStation(st.index));
+  sendBtn.addEventListener('click', () => sendOrder(Array.from(selected)));
+  function randomOrderIds(){
+    const shuffled = SKUS.map(s => s.id).sort(() => Math.random() - 0.5);
+    const n = 2 + Math.floor(Math.random() * 3);
+    return shuffled.slice(0, n);
+  }
+
+  randomBtn.addEventListener('click', () => sendOrder(randomOrderIds()));
+
+  burstBtn.addEventListener('click', () => {
+    // 5 orders against 4 stations: fills every station at once and shows
+    // the 5th order visibly queue until one clears.
+    log('info', 'BURST', '5 orders arriving in quick succession', true);
+    for (let i = 0; i < 5; i++) {
+      setTimeout(() => sendOrder(randomOrderIds()), i * 200);
+    }
+  });
+
+  resetBtn.addEventListener('click', resetAll);
+})();
+</script>
